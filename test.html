@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <meta charset=utf-8 />
+ <title>JavaScript forumla parser: Testsite</title>
+ <script type="text/javascript" src="forumlaparser.js"></script>
+ <script type="text/javascript">
+  var Tester = function(outputElement) {
+    var listElement = document.createElement("ol");
+    outputElement.appendChild(listElement);
+
+    var parser = new FormulaParser();
+
+    var testsPassed = 0;
+    var testsFailed = 0;
+
+    var assert = function(evaluator, expectedResult) {
+      evaluator.compile();
+      var result = evaluator.evaluate();
+
+      var liElement = document.createElement("li");
+      if(result === expectedResult) {
+        liElement.appendChild(document.createTextNode(evaluator.expr + " == " + result));
+        liElement.style.backgroundColor = "lightgreen";
+        ++testsPassed;
+      } else {
+        liElement.appendChild(document.createTextNode(evaluator.expr + " == " + result + " != " + expectedResult));
+        liElement.style.backgroundColor = "red";
+        ++testsFailed;
+      }
+      listElement.appendChild(liElement);
+    };
+
+    var assertThrow = function(evaluator, expectedMessage, expectedOffset) {
+      var liElement = document.createElement("li");
+
+      try {
+        evaluator.compile();
+        var result = evaluator.evaluate();
+        liElement.appendChild(document.createTextNode("No exception catched - result " + result));
+        liElement.style.backgroundColor = "red";
+        ++testsFailed;
+      } catch(e) {
+        liElement.appendChild(document.createTextNode((typeof e.message === "string" ? e.message : "no message") + " @" + ((e.token && typeof e.token.offset === "number") ? e.token.offset : " ?")));
+        if(e.message === expectedMessage && e.token && e.token.offset === expectedOffset) {
+          liElement.style.backgroundColor = "lightgreen";
+          ++testsPassed;
+        } else {
+          liElement.style.backgroundColor = "red";
+          ++testsFailed;
+        }
+      }
+
+      listElement.appendChild(liElement);
+    };
+
+    var setupEvaluator = function(expr, placeholderValues) {
+      var evaluator = new parser.Evaluator();
+      evaluator.defaultSetup();
+      evaluator.expr = expr;
+      evaluator.placeholderValues = placeholderValues ? placeholderValues : {};
+      return evaluator;
+    };
+
+    var testExpr = function(expr, expectedResult, placeholderValues) {
+      assert(setupEvaluator(expr, placeholderValues), expectedResult);
+    };
+
+    var testInvalidExpr = function(expr, expectedOffset, expectedMessage, placeholderValues) {
+      assertThrow(setupEvaluator(expr, placeholderValues), expectedOffset, expectedMessage);
+    };
+
+    this.doTests = function() {
+      testExpr("5 + 2", 7);
+      testExpr("(5) * (2)", 10);
+      testExpr("(1 + 2 * 3 + 4)", 11);
+      testExpr("(1 + 2) * (3 + 4)", 21);
+      testExpr("(1 + a) * (b + 4)", 21, {a: 2, b: 3});
+      testExpr("xor(a, b)", false, {a: true, b: true});
+      testExpr("xor(a, b) & xor(a, 0)", true, {a: true, b: false});
+      testExpr("xor(a, b) & xor(a, 1)", false, {a: true, b: false});
+      testExpr("a&b | a&c", true, {a: true, b: false, c: true});
+      testExpr("a&b | a&c", false, {a: true, b: false, c: false});
+      testExpr("a&(b | a)&c", true, {a: true, b: false, c: true});
+      testExpr("a&b | a&!c", true, {a: true, b: false, c: false});
+      testInvalidExpr("a&b | a&!c", "variable c can not be resolved", 9, {a: true, b: false});
+      testInvalidExpr("a&b | a&!c", "variable b can not be resolved", 2, {a: true, c: false});
+      testInvalidExpr("a&b  a&!c", "operator expected", 5, {a: true, b: false, c: false});
+      testInvalidExpr("(1 + 2) * 3 + 4)", "unexpected closing token", 15);
+      testInvalidExpr("(1 + 2 * (3 + 4)", "unexpected opening token", 0);
+      testInvalidExpr("(1 + ) * (3 + 4)", "rvalue expected", 3); // 3 == offset of the token requiring the rvalue
+      testInvalidExpr("(1 + 2) * ( + 4)", "lvalue expected", 12); // 12 == offset of the token requiring the lvalue
+
+      var pElement = document.createElement("p");
+      pElement.appendChild(document.createTextNode("Passed " + testsPassed + " of " + (testsPassed + testsFailed) + " tests."));
+      pElement.style.backgroundColor = testsFailed === 0 ? "lightgreen" : "red";
+      outputElement.appendChild(pElement);
+    };
+  };
+ </script>
+</head>
+<body id="test_output" onload="(new Tester(document.getElementById('test_output'))).doTests();">
+  <h1>Testresults</h1>
+</body>
+</html>
